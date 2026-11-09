@@ -1,0 +1,6 @@
+{
+  "name": "MegaMarket Multi-Vendor Platform",
+  "description": "Multi-Vendor E-Commerce Platform with Vendor Hub, Customer Storefront, Admin Governance by Martin Mulekya, AI Review Insights & Shopping Advisor, and M-Pesa Daraja Checkout.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
