@@ -23,10 +23,10 @@ interface AuditData {
   system: string;
   auditTimestamp: string;
   status: string;
-  rootSuperAdmin: {
-    name: string;
-    email: string;
-    exclusiveRights: string[];
+  rootSuperAdmin?: {
+    role?: string;
+    isConfigured?: boolean;
+    exclusiveRights?: string[];
   };
   rules: Array<{
     id: number;

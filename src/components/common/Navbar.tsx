@@ -9,6 +9,7 @@ import {
   Store,
   Shield,
   X,
+  LogOut,
 } from 'lucide-react';
 import { PromoStrip } from './PromoStrip';
 import { AccountMenu } from './AccountMenu';
@@ -16,10 +17,11 @@ import { CategoryBar } from './CategoryBar';
 import { MobileNavDrawer } from './MobileNavDrawer';
 
 interface NavbarProps {
-  activeView: 'store' | 'vendor' | 'admin';
+  activeView: 'store' | 'vendor' | 'admin' | 'info';
   setActiveView: (view: 'store' | 'vendor' | 'admin') => void;
   onOpenCart: () => void;
   onOpenOrders: () => void;
+  onOpenProfile?: () => void;
   onOpenAuth: () => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
@@ -41,13 +43,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   setActiveView,
   onOpenCart,
   onOpenOrders,
+  onOpenProfile,
   onOpenAuth,
   searchQuery,
   setSearchQuery,
   selectedCategory,
   setSelectedCategory,
 }) => {
-  const { currentUser, isLoggedIn, cartCount, cartTotal, formatPrice, publicProducts } = useStore();
+  const { currentUser, isLoggedIn, promptLogout, cartCount, cartTotal, formatPrice, publicProducts } = useStore();
   const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
 
@@ -221,8 +224,44 @@ export const Navbar: React.FC<NavbarProps> = ({
               <AccountMenu
                 onOpenAuth={onOpenAuth}
                 onOpenOrders={onOpenOrders}
+                onOpenProfile={onOpenProfile}
                 setActiveView={setActiveView}
               />
+
+              {/* Desktop Visible User Badge + Log Out Button */}
+              {isLoggedIn && currentUser && (
+                <div className="hidden md:flex items-center gap-2 pl-2 border-l border-slate-200">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200">
+                    <span className="text-xs font-semibold text-slate-800 truncate max-w-[110px]">
+                      {currentUser.fullName}
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 ${
+                        currentUser.role === 'admin'
+                          ? 'bg-purple-100 text-purple-800'
+                          : currentUser.role === 'vendor'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-orange-100 text-orange-800'
+                      }`}
+                    >
+                      {currentUser.role === 'admin'
+                        ? 'Admin'
+                        : currentUser.role === 'vendor'
+                        ? 'Vendor'
+                        : 'Customer'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={promptLogout}
+                    aria-label="Log out"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2 shrink-0"
+                  >
+                    <LogOut className="w-4 h-4 shrink-0" />
+                    <span>Log out</span>
+                  </button>
+                </div>
+              )}
 
               {/* Orders Link */}
               <button
@@ -301,6 +340,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         setActiveView={setActiveView}
         onOpenAuth={onOpenAuth}
         onOpenOrders={onOpenOrders}
+        onOpenProfile={onOpenProfile}
       />
     </header>
   );

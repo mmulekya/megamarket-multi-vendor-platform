@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../../context/StoreContext';
 import { PaymentMethod, Order } from '../../types';
 import confetti from 'canvas-confetti';
@@ -14,6 +14,7 @@ import {
   AlertCircle,
   Truck,
   Check,
+  LogOut,
 } from 'lucide-react';
 
 interface CheckoutModalProps {
@@ -27,7 +28,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   onClose,
   onOrderSuccess,
 }) => {
-  const { currentUser, cart, cartTotal, createOrder, formatPrice, isLoggedIn } = useStore();
+  const { currentUser, cart, cartTotal, createOrder, formatPrice, isLoggedIn, currency, promptLogout, registerOnLogout } = useStore();
 
   const [fullName, setFullName] = useState(currentUser?.fullName || '');
   const [email, setEmail] = useState(currentUser?.email || '');
@@ -43,6 +44,26 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   const [pinError, setPinError] = useState('');
   const [countdown, setCountdown] = useState(60);
   const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
+
+  useEffect(() => {
+    return registerOnLogout(() => {
+      setCompletedOrder(null);
+      setStkStage('idle');
+      setMpesaPin('');
+      setPinError('');
+      setFullName('');
+      setEmail('');
+      setPhone('+254 7');
+    });
+  }, [registerOnLogout]);
+
+  useEffect(() => {
+    if (isOpen && currentUser && !completedOrder) {
+      setFullName((prev) => prev || currentUser.fullName || '');
+      setEmail((prev) => prev || currentUser.email || '');
+      setPhone((prev) => (prev && prev !== '+254 7' ? prev : currentUser.phoneNumber || '+254 7'));
+    }
+  }, [isOpen, currentUser, completedOrder]);
 
   if (!isOpen) return null;
 
@@ -217,13 +238,26 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
             </div>
 
-            <div className="flex justify-center gap-3 pt-2">
+            <div className="flex flex-wrap justify-center gap-3 pt-2">
               <button
+                type="button"
                 onClick={onClose}
-                className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition-all shadow-md"
+                className="px-6 py-2.5 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-xs font-bold transition-all shadow-md min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:ring-offset-2"
               >
                 Continue Shopping
               </button>
+
+              {isLoggedIn && (
+                <button
+                  type="button"
+                  onClick={promptLogout}
+                  aria-label="Log out"
+                  className="inline-flex items-center gap-1.5 px-5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition-colors min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
+                >
+                  <LogOut className="w-4 h-4 shrink-0" />
+                  <span>Log out</span>
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -379,10 +413,23 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                 <span>Shipping Fee</span>
                 <span>{shippingFee === 0 ? 'FREE' : formatPrice(shippingFee)}</span>
               </div>
-              <div className="flex justify-between text-sm font-extrabold text-slate-900 pt-2 border-t border-slate-200">
+              <div className="flex justify-between items-baseline text-sm font-extrabold text-slate-900 pt-2 border-t border-slate-200">
                 <span>Total Due (Server Enforced)</span>
-                <span className="text-orange-600">{formatPrice(grandTotal)}</span>
+                <div className="text-right">
+                  <span className="text-orange-600 block">{formatPrice(grandTotal)}</span>
+                  {currency !== 'KES' && (
+                    <span className="text-[11px] text-slate-500 font-normal block">
+                      (KES {grandTotal.toLocaleString()})
+                    </span>
+                  )}
+                </div>
               </div>
+
+              {currency !== 'KES' && (
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-snug">
+                  Prices are shown in <span className="font-bold">{currency}</span> as an estimate. You will be charged in KES.
+                </div>
+              )}
             </div>
 
             <button
@@ -392,12 +439,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               {paymentMethod === 'mpesa' ? (
                 <>
                   <Smartphone className="w-4 h-4" />
-                  <span>Send M-Pesa STK Prompt ({formatPrice(grandTotal)})</span>
+                  <span>
+                    Send M-Pesa STK Prompt ({formatPrice(grandTotal)}
+                    {currency !== 'KES' ? ` · KES ${grandTotal.toLocaleString()}` : ''})
+                  </span>
                 </>
               ) : (
                 <>
                   <Check className="w-4 h-4" />
-                  <span>Place Order ({formatPrice(grandTotal)})</span>
+                  <span>
+                    Place Order ({formatPrice(grandTotal)}
+                    {currency !== 'KES' ? ` · KES ${grandTotal.toLocaleString()}` : ''})
+                  </span>
                 </>
               )}
             </button>

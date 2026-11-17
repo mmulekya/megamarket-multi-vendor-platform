@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import {
   CartItem,
   Category,
@@ -28,6 +28,7 @@ import {
   ReviewsRLS,
   verifyOwnership,
 } from '../security/rlsPolicies';
+import { RatesApiResponse, formatCurrencyPrice } from '../utils/currency';
 
 export interface BackendSecurityProfile {
   level: 'low_unlinked';
@@ -49,7 +50,14 @@ interface StoreContextType {
   currentVendor: Vendor | null;
   isCurrentUserRootAdmin: boolean;
   isLoggedIn: boolean;
-  logout: () => void;
+  logout: () => Promise<void>;
+  promptLogout: () => void;
+  isConfirmLogoutOpen: boolean;
+  setIsConfirmLogoutOpen: (open: boolean) => void;
+  toastMessage: string | null;
+  showToast: (msg: string) => void;
+  dismissToast: () => void;
+  registerOnLogout: (cb: () => void) => () => void;
   backendSecurityProfile: BackendSecurityProfile;
   switchUser: (userId: string) => void;
   loginWithEmail: (email: string, password?: string) => Promise<{ success: boolean; message: string }>;
@@ -63,6 +71,7 @@ interface StoreContextType {
     storeName?: string;
     storeDescription?: string;
     city?: string;
+    acceptedTerms: boolean;
   }) => Promise<{ success: boolean; message: string }>;
 
   // 6-Point Security Architecture APIs
@@ -146,9 +155,12 @@ interface StoreContextType {
   adminUpdateOrderStatus: (orderId: string, status: OrderStatus) => void;
 
   // Currency & Formatting
-  currency: 'KES' | 'USD';
-  setCurrency: (c: 'KES' | 'USD') => void;
+  currency: string;
+  setCurrency: (c: string) => void;
+  ratesData: RatesApiResponse | null;
+  ratesLoading: boolean;
   formatPrice: (kesAmount: number) => string;
+  formatPriceInCurrency: (kesAmount: number, targetCurrency: string) => string;
 
   // Reviews
   addReview: (productId: string, reviewData: { rating: number; comment: string; author?: string }) => { success: boolean; message: string };
@@ -178,7 +190,52 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [currency, setCurrency] = useState<'KES' | 'USD'>('KES');
+  // Currency: Default to KES, saved and restored from localStorage (key "mm_currency")
+  const [currency, setCurrencyState] = useState<string>(() => {
+    try {
+      return localStorage.getItem('mm_currency') || 'KES';
+    } catch {
+      return 'KES';
+    }
+  });
+
+  const [ratesData, setRatesData] = useState<RatesApiResponse | null>(null);
+  const [ratesLoading, setRatesLoading] = useState<boolean>(true);
+
+  const setCurrency = (c: string) => {
+    setCurrencyState(c);
+    try {
+      localStorage.setItem('mm_currency', c);
+    } catch (e) {
+      console.warn('Could not save currency to localStorage:', e);
+    }
+  };
+
+  // Fetch live exchange rates on mount
+  useEffect(() => {
+    let active = true;
+    setRatesLoading(true);
+    fetch('/api/rates')
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((data: RatesApiResponse) => {
+        if (active && data?.rates) {
+          setRatesData(data);
+        }
+      })
+      .catch((err) => {
+        console.warn('Live rates fetch failed, default fallback rates active:', err);
+      })
+      .finally(() => {
+        if (active) setRatesLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Sync ONLY cart to localStorage
   useEffect(() => {
@@ -296,6 +353,37 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     isCurrentAdminAuthorized: isCurrentUserRootAdmin,
   };
 
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isConfirmLogoutOpen, setIsConfirmLogoutOpen] = useState<boolean>(false);
+  const onLogoutCallbacks = useRef<Set<() => void>>(new Set());
+  const toastTimerRef = useRef<number | null>(null);
+
+  const showToast = (message: string) => {
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+    }
+    setToastMessage(message);
+    toastTimerRef.current = window.setTimeout(() => {
+      setToastMessage((prev) => (prev === message ? null : prev));
+      toastTimerRef.current = null;
+    }, 4500);
+  };
+
+  const dismissToast = () => {
+    if (toastTimerRef.current) {
+      window.clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    setToastMessage(null);
+  };
+
+  const registerOnLogout = (cb: () => void) => {
+    onLogoutCallbacks.current.add(cb);
+    return () => {
+      onLogoutCallbacks.current.delete(cb);
+    };
+  };
+
   const logout = async () => {
     try {
       await fetch('/api/auth/logout', {
@@ -305,12 +393,35 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (err) {
       console.error('Logout error:', err);
     }
+    // Clear current user, cart, and all user-specific state
     setSessionUser(null);
     setCurrentUserId(null);
     setIsLoggedIn(false);
-    // Clear the cart on logout as required
     setCart([]);
     localStorage.removeItem(STORAGE_KEYS.CART);
+    setUsers(SEED_USERS);
+    setVendors(SEED_VENDORS);
+    setOrders(SEED_ORDERS);
+    setIsConfirmLogoutOpen(false);
+
+    // Run registered onLogout callbacks (close modals/dropdowns, navigate to store, scroll top)
+    onLogoutCallbacks.current.forEach((cb) => {
+      try {
+        cb();
+      } catch (e) {
+        console.error('Error in onLogout callback:', e);
+      }
+    });
+
+    showToast('You have been logged out');
+  };
+
+  const promptLogout = () => {
+    if (cart.length > 0) {
+      setIsConfirmLogoutOpen(true);
+    } else {
+      logout();
+    }
   };
 
   // Switch active user persona
@@ -423,6 +534,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     storeName?: string;
     storeDescription?: string;
     city?: string;
+    acceptedTerms: boolean;
   }) => {
     try {
       const res = await fetch('/api/auth/register', {
@@ -436,6 +548,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           role: userData.role,
           storeName: userData.storeName,
           storeDescription: userData.storeDescription,
+          acceptedTerms: userData.acceptedTerms,
         }),
       });
 
@@ -1109,20 +1222,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Rule 6: Comprehensive Security Audit
   const fetchSecurityAuditReport = async () => {
     try {
-      const res = await fetch('/api/security/audit');
+      const res = await fetch('/api/security/audit', {
+        credentials: 'include',
+      });
       return await res.json();
     } catch {
       return null;
     }
   };
 
-  // Price formatter (KES or USD)
+  // Universal currency price formatters
   const formatPrice = (kesAmount: number) => {
-    if (currency === 'USD') {
-      const usd = kesAmount / 130;
-      return `$${usd.toFixed(2)}`;
-    }
-    return `KES ${kesAmount.toLocaleString()}`;
+    return formatCurrencyPrice(kesAmount, currency, ratesData?.rates);
+  };
+
+  const formatPriceInCurrency = (kesAmount: number, targetCurrency: string) => {
+    return formatCurrencyPrice(kesAmount, targetCurrency, ratesData?.rates);
   };
 
   // Reset to default fresh seed data
@@ -1154,6 +1269,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isCurrentUserRootAdmin,
         isLoggedIn,
         logout,
+        promptLogout,
+        isConfirmLogoutOpen,
+        setIsConfirmLogoutOpen,
+        toastMessage,
+        showToast,
+        dismissToast,
+        registerOnLogout,
         backendSecurityProfile,
         switchUser,
         loginWithEmail,
@@ -1195,7 +1317,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         adminUpdateOrderStatus,
         currency,
         setCurrency,
+        ratesData,
+        ratesLoading,
         formatPrice,
+        formatPriceInCurrency,
         resetAllData,
       }}
     >

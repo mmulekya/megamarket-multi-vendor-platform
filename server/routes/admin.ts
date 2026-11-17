@@ -1,4 +1,5 @@
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
+import type { Request, Response } from 'express';
 import { dbHelpers } from '../db/index.ts';
 import { requireAuth, requireRole } from '../middleware/auth.ts';
 
@@ -11,9 +12,9 @@ adminRouter.use(requireAuth, requireRole('admin'));
  * GET /api/admin/vendors
  * List all vendors along with their owner details
  */
-adminRouter.get('/vendors', (_req: Request, res: Response) => {
+adminRouter.get('/vendors', async (_req: Request, res: Response) => {
   try {
-    const vendors = dbHelpers.getAllVendors();
+    const vendors = await dbHelpers.getAllVendors();
     return res.json({ vendors });
   } catch (error: any) {
     console.error('Error fetching vendors:', error);
@@ -25,7 +26,7 @@ adminRouter.get('/vendors', (_req: Request, res: Response) => {
  * PATCH /api/admin/vendors/:id/status
  * Approve, suspend or set pending status on a vendor store
  */
-adminRouter.patch('/vendors/:id/status', (req: Request, res: Response) => {
+adminRouter.patch('/vendors/:id/status', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -34,12 +35,12 @@ adminRouter.patch('/vendors/:id/status', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid status. Must be pending, approved, or suspended.' });
     }
 
-    const vendor = dbHelpers.findVendorById(id);
+    const vendor = await dbHelpers.findVendorById(id);
     if (!vendor) {
       return res.status(404).json({ error: 'Vendor store not found.' });
     }
 
-    dbHelpers.updateVendorStatus(id, status);
+    await dbHelpers.updateVendorStatus(id, status);
 
     return res.json({
       success: true,
@@ -57,15 +58,15 @@ adminRouter.patch('/vendors/:id/status', (req: Request, res: Response) => {
  * DELETE /api/admin/vendors/:id
  * Remove a vendor store permanently
  */
-adminRouter.delete('/vendors/:id', (req: Request, res: Response) => {
+adminRouter.delete('/vendors/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const vendor = dbHelpers.findVendorById(id);
+    const vendor = await dbHelpers.findVendorById(id);
     if (!vendor) {
       return res.status(404).json({ error: 'Vendor store not found.' });
     }
 
-    dbHelpers.deleteVendor(id);
+    await dbHelpers.deleteVendor(id);
 
     return res.json({
       success: true,
@@ -82,9 +83,9 @@ adminRouter.delete('/vendors/:id', (req: Request, res: Response) => {
  * GET /api/admin/users
  * List all registered users (excluding password hashes)
  */
-adminRouter.get('/users', (_req: Request, res: Response) => {
+adminRouter.get('/users', async (_req: Request, res: Response) => {
   try {
-    const users = dbHelpers.getAllUsers();
+    const users = await dbHelpers.getAllUsers();
     return res.json({ users });
   } catch (error: any) {
     console.error('Error fetching users:', error);
@@ -96,7 +97,7 @@ adminRouter.get('/users', (_req: Request, res: Response) => {
  * DELETE /api/admin/users/:id
  * Remove a user record
  */
-adminRouter.delete('/users/:id', (req: Request, res: Response) => {
+adminRouter.delete('/users/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 
@@ -105,7 +106,7 @@ adminRouter.delete('/users/:id', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Security Constraint: You cannot delete your own administrator account.' });
     }
 
-    const targetUser = dbHelpers.findUserById(id);
+    const targetUser = await dbHelpers.findUserById(id);
     if (!targetUser) {
       return res.status(404).json({ error: 'User not found.' });
     }
@@ -114,7 +115,7 @@ adminRouter.delete('/users/:id', (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Security Constraint: Administrator accounts cannot be deleted.' });
     }
 
-    dbHelpers.deleteUser(id);
+    await dbHelpers.deleteUser(id);
 
     return res.json({
       success: true,
@@ -123,5 +124,46 @@ adminRouter.delete('/users/:id', (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error deleting user:', error);
     return res.status(500).json({ error: 'Failed to delete user.' });
+  }
+});
+
+/**
+ * GET /api/admin/reports
+ * List all customer and counterfeit reports
+ */
+adminRouter.get('/reports', async (_req: Request, res: Response) => {
+  try {
+    const reports = await dbHelpers.getAllReports();
+    return res.json({ reports });
+  } catch (error: any) {
+    console.error('Error fetching reports:', error);
+    return res.status(500).json({ error: 'Failed to retrieve reports.' });
+  }
+});
+
+/**
+ * PATCH /api/admin/reports/:id/status
+ * Update report status (open, investigating, resolved, dismissed)
+ */
+adminRouter.patch('/reports/:id/status', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!['open', 'investigating', 'resolved', 'dismissed'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid status. Must be open, investigating, resolved, or dismissed.' });
+    }
+
+    await dbHelpers.updateReportStatus(id, status);
+
+    return res.json({
+      success: true,
+      message: `Report status updated to ${status}.`,
+      reportId: id,
+      status,
+    });
+  } catch (error: any) {
+    console.error('Error updating report status:', error);
+    return res.status(500).json({ error: 'Failed to update report status.' });
   }
 });

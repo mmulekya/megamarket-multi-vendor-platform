@@ -1,18 +1,16 @@
 import React from 'react';
-import { useStore } from '../../context/StoreContext';
-import { Truck, Phone, ChevronDown } from 'lucide-react';
+import { Truck, Phone } from 'lucide-react';
+import { CurrencySelector } from './CurrencySelector';
 
 /**
  * PromoStrip Component
  * A thin real-world announcement strip above the main navigation header.
- * Displays legitimate store policies and a working currency switcher.
+ * Displays legitimate store policies and the CurrencySelector dropdown.
  */
 export const PromoStrip: React.FC = () => {
-  const { currency, setCurrency } = useStore();
-
   return (
-    <div className="bg-[#27272A] text-slate-200 text-xs py-1.5 px-4 border-b border-neutral-800">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
+    <div className="bg-[#27272A] text-slate-200 text-xs py-1 px-4 border-b border-neutral-800">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
         {/* Left: Authentic Store Commitments */}
         <div className="flex items-center gap-3 overflow-hidden text-[11px] sm:text-xs">
           <span className="flex items-center gap-1.5 font-medium text-amber-400">
@@ -25,26 +23,16 @@ export const PromoStrip: React.FC = () => {
           </span>
         </div>
 
-        {/* Right: Working Currency Switcher & Customer Helpline */}
-        <div className="flex items-center gap-4 shrink-0 text-[11px]">
+        {/* Right: Working Currency Selector & Customer Helpline */}
+        <div className="flex items-center gap-3 sm:gap-4 shrink-0 text-[11px]">
           <div className="hidden sm:flex items-center gap-1 text-neutral-300">
             <Phone className="w-3 h-3 text-amber-400" />
             <span>Helpline: 0700 123 456</span>
           </div>
 
           <div className="flex items-center gap-1 text-neutral-300 pl-3 border-l border-neutral-700">
-            <span className="text-neutral-400">Currency:</span>
-            <div className="relative inline-block">
-              <select
-                aria-label="Select currency"
-                value={currency}
-                onChange={(e) => setCurrency(e.target.value as 'KES' | 'USD')}
-                className="bg-transparent text-white font-bold cursor-pointer outline-none hover:text-[#F68B1E] transition-colors pr-3"
-              >
-                <option value="KES" className="bg-[#27272A] text-white">KES</option>
-                <option value="USD" className="bg-[#27272A] text-white">USD</option>
-              </select>
-            </div>
+            <span className="text-neutral-400 hidden xs:inline">Currency:</span>
+            <CurrencySelector />
           </div>
         </div>
       </div>

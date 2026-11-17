@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useStore } from '../../context/StoreContext';
 import {
   X,
@@ -22,6 +22,7 @@ interface MobileNavDrawerProps {
   setActiveView: (view: 'store' | 'vendor' | 'admin') => void;
   onOpenAuth: () => void;
   onOpenOrders: () => void;
+  onOpenProfile?: () => void;
 }
 
 /**
@@ -37,8 +38,24 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({
   setActiveView,
   onOpenAuth,
   onOpenOrders,
+  onOpenProfile,
 }) => {
-  const { categories, currentUser, isLoggedIn, logout } = useStore();
+  const { categories, currentUser, isLoggedIn, promptLogout, registerOnLogout } = useStore();
+
+  useEffect(() => {
+    return registerOnLogout(() => {
+      onClose();
+    });
+  }, [registerOnLogout, onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -116,12 +133,30 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
           {/* Quick Account Links */}
           <div className="py-2">
+            {isLoggedIn && onOpenProfile && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenProfile();
+                }}
+                className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between min-h-[44px]"
+              >
+                <span className="flex items-center gap-2.5">
+                  <User className="w-4 h-4 text-slate-400" />
+                  <span>My Profile</span>
+                </span>
+                <ChevronRight className="w-4 h-4 text-slate-400" />
+              </button>
+            )}
+
             <button
+              type="button"
               onClick={() => {
                 onClose();
                 onOpenOrders();
               }}
-              className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between"
+              className="w-full px-4 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50 flex items-center justify-between min-h-[44px]"
             >
               <span className="flex items-center gap-2.5">
                 <Package className="w-4 h-4 text-slate-400" />
@@ -223,14 +258,16 @@ export const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({
         {isLoggedIn && (
           <div className="p-4 border-t border-slate-200 bg-slate-50">
             <button
+              type="button"
               onClick={() => {
                 onClose();
-                logout();
+                promptLogout();
               }}
-              className="w-full py-2 px-3 text-rose-600 hover:bg-rose-50 text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-colors min-h-[40px]"
+              aria-label="Log out"
+              className="w-full py-2.5 px-4 text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-xs font-bold rounded-lg flex items-center justify-center gap-2 transition-colors min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:ring-offset-2"
             >
-              <LogOut className="w-4 h-4 text-rose-500" />
-              <span>LOG OUT</span>
+              <LogOut className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>Log out</span>
             </button>
           </div>
         )}

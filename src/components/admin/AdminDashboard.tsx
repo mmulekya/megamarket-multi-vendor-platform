@@ -21,10 +21,29 @@ import {
   Search,
   Filter,
   Terminal,
+  ShieldAlert,
+  RefreshCw,
+  LogOut,
+  ArrowLeft,
 } from 'lucide-react';
 import { SecurityAuditTerminal } from './SecurityAuditTerminal';
 
-export const AdminDashboard: React.FC = () => {
+interface ReportItem {
+  id: string;
+  reference_number: string;
+  report_type: string;
+  target_id: string | null;
+  description: string;
+  contact_email: string;
+  status: 'open' | 'investigating' | 'resolved' | 'dismissed';
+  created_at: string;
+}
+
+interface AdminDashboardProps {
+  onBackToStore?: () => void;
+}
+
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ onBackToStore }) => {
   const {
     currentUser,
     isCurrentUserRootAdmin,
@@ -40,9 +59,10 @@ export const AdminDashboard: React.FC = () => {
     orders,
     users,
     formatPrice,
+    promptLogout,
   } = useStore();
 
-  const [activeTab, setActiveTab] = useState<'security' | 'vendors' | 'categories' | 'orders' | 'users'>('security');
+  const [activeTab, setActiveTab] = useState<'security' | 'vendors' | 'categories' | 'orders' | 'users' | 'reports'>('security');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryImage, setNewCategoryImage] = useState('');
 
@@ -50,6 +70,49 @@ export const AdminDashboard: React.FC = () => {
   const [userSearch, setUserSearch] = useState('');
   const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'customer' | 'vendor' | 'admin'>('all');
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Customer & Counterfeit Reports State
+  const [reports, setReports] = useState<ReportItem[]>([]);
+  const [isLoadingReports, setIsLoadingReports] = useState(false);
+  const [reportFilter, setReportFilter] = useState<'all' | 'open' | 'investigating' | 'resolved' | 'dismissed'>('all');
+
+  const fetchReports = async () => {
+    setIsLoadingReports(true);
+    try {
+      const res = await fetch('/api/admin/reports', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setReports(data.reports || []);
+      }
+    } catch (err) {
+      console.error('Failed to load reports:', err);
+    } finally {
+      setIsLoadingReports(false);
+    }
+  };
+
+  React.useEffect(() => {
+    fetchReports();
+  }, []);
+
+  const handleUpdateReportStatus = async (reportId: string, status: 'open' | 'investigating' | 'resolved' | 'dismissed') => {
+    try {
+      const res = await fetch(`/api/admin/reports/${reportId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ status }),
+      });
+      if (res.ok) {
+        setReports((prev) => prev.map((r) => (r.id === reportId ? { ...r, status } : r)));
+        showFeedback(`Report ${reportId} marked as ${status.toUpperCase()}.`, 'success');
+      } else {
+        showFeedback('Failed to update report status.', 'error');
+      }
+    } catch {
+      showFeedback('Network error updating report.', 'error');
+    }
+  };
 
   const showFeedback = (message: string, type: 'success' | 'error' = 'success') => {
     setFeedback({ message, type });
@@ -165,28 +228,53 @@ export const AdminDashboard: React.FC = () => {
           </p>
         </div>
 
-        {/* Security State & Authority Status Card */}
-        <div className="bg-purple-950/90 p-4 rounded-2xl border border-purple-700/80 text-xs space-y-2 w-full lg:w-80 shrink-0">
-          <div className="flex items-center justify-between">
-            <span className="text-purple-300 font-bold uppercase tracking-wider text-[11px]">Backend Topology</span>
-            <span className="text-emerald-400 font-mono text-[10px] font-bold">UNLINKED / LOCAL</span>
-          </div>
-          <p className="text-purple-100 text-[11px] leading-relaxed">
-            Standalone sovereign mode enabled. Third-party cloud identity lockouts are bypassed.
-          </p>
-          <div className="pt-2 border-t border-purple-800/60 flex items-center justify-between">
-            <span className="text-slate-400 text-[11px]">Your Authority:</span>
-            {isCurrentUserRootAdmin ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-800">
-                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                Root Granted
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded-full border border-amber-800">
-                <Lock className="w-3 h-3 text-amber-400" />
-                Restricted (Non-Root)
-              </span>
+        {/* Right Column: Header Controls + Security State Card */}
+        <div className="flex flex-col gap-3 w-full lg:w-80 shrink-0">
+          <div className="flex flex-wrap items-center lg:justify-end gap-2">
+            {onBackToStore && (
+              <button
+                type="button"
+                onClick={onBackToStore}
+                aria-label="Back to store"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs font-bold transition-colors min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-purple-950"
+              >
+                <ArrowLeft className="w-4 h-4 shrink-0" />
+                <span>Back to store</span>
+              </button>
             )}
+            <button
+              type="button"
+              onClick={promptLogout}
+              aria-label="Log out"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition-colors min-h-[44px] focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 focus-visible:ring-offset-2 focus-visible:ring-offset-purple-950"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              <span>Log out</span>
+            </button>
+          </div>
+
+          <div className="bg-purple-950/90 p-4 rounded-2xl border border-purple-700/80 text-xs space-y-2 w-full">
+            <div className="flex items-center justify-between">
+              <span className="text-purple-300 font-bold uppercase tracking-wider text-[11px]">Backend Topology</span>
+              <span className="text-emerald-400 font-mono text-[10px] font-bold">UNLINKED / LOCAL</span>
+            </div>
+            <p className="text-purple-100 text-[11px] leading-relaxed">
+              Standalone sovereign mode enabled. Third-party cloud identity lockouts are bypassed.
+            </p>
+            <div className="pt-2 border-t border-purple-800/60 flex items-center justify-between">
+              <span className="text-slate-400 text-[11px]">Your Authority:</span>
+              {isCurrentUserRootAdmin ? (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-800">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  Root Granted
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-300 bg-amber-950/80 px-2 py-0.5 rounded-full border border-amber-800">
+                  <Lock className="w-3 h-3 text-amber-400" />
+                  Restricted (Non-Root)
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -330,6 +418,26 @@ export const AdminDashboard: React.FC = () => {
         >
           <ShoppingBag className="w-4 h-4" />
           <span>All Platform Orders ({orders.length})</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setActiveTab('reports');
+            fetchReports();
+          }}
+          className={`pb-3 transition-colors flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'reports'
+              ? 'border-b-2 border-rose-600 text-rose-600'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4 text-rose-500" />
+          <span>Reports Desk ({reports.length})</span>
+          {reports.filter((r) => r.status === 'open').length > 0 && (
+            <span className="bg-rose-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full">
+              {reports.filter((r) => r.status === 'open').length} new
+            </span>
+          )}
         </button>
       </div>
 
@@ -808,6 +916,165 @@ export const AdminDashboard: React.FC = () => {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* TAB 5: Customer & Counterfeit Reports Desk */}
+      {activeTab === 'reports' && (
+        <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-xs p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-sm text-slate-900">Customer & Counterfeit Reports Desk</h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-200">
+                  SQLite Protected
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Investigate and resolve reports submitted by shoppers via the Report an Issue portal.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Filter by status */}
+              <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs font-semibold">
+                {(['all', 'open', 'investigating', 'resolved', 'dismissed'] as const).map((st) => (
+                  <button
+                    key={st}
+                    onClick={() => setReportFilter(st)}
+                    className={`px-2.5 py-1 rounded-lg capitalize transition-all ${
+                      reportFilter === st
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={fetchReports}
+                disabled={isLoadingReports}
+                className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors"
+                title="Refresh reports"
+              >
+                <RefreshCw className={`w-4 h-4 ${isLoadingReports ? 'animate-spin' : ''}`} />
+              </button>
+            </div>
+          </div>
+
+          {reports.filter((r) => reportFilter === 'all' || r.status === reportFilter).length === 0 ? (
+            <div className="p-10 text-center space-y-2 border border-dashed border-slate-200 rounded-2xl">
+              <ShieldAlert className="w-10 h-10 text-slate-300 mx-auto" />
+              <h4 className="font-bold text-sm text-slate-800">No Reports in this View</h4>
+              <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                No tickets found for status "{reportFilter}". Submissions from the Report an Issue form (#/help/report) appear here automatically.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                  <tr>
+                    <th className="py-3 px-3">Reference #</th>
+                    <th className="py-3 px-3">Category</th>
+                    <th className="py-3 px-3">Target ID</th>
+                    <th className="py-3 px-3">Reporter Email</th>
+                    <th className="py-3 px-3">Description</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {reports
+                    .filter((r) => reportFilter === 'all' || r.status === reportFilter)
+                    .map((report) => (
+                      <tr key={report.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3 px-3 font-mono font-bold text-slate-900 whitespace-nowrap">
+                          {report.reference_number}
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
+                              report.report_type === 'counterfeit'
+                                ? 'bg-rose-100 text-rose-800'
+                                : report.report_type === 'wrong_item'
+                                ? 'bg-amber-100 text-amber-800'
+                                : report.report_type === 'copyright_complaint'
+                                ? 'bg-purple-100 text-purple-800'
+                                : 'bg-blue-100 text-blue-800'
+                            }`}
+                          >
+                            {report.report_type === 'copyright_complaint'
+                              ? 'Copyright / content complaint'
+                              : report.report_type.replace('_', ' ')}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-mono text-slate-600">
+                          {report.target_id || <span className="text-slate-400">—</span>}
+                        </td>
+                        <td className="py-3 px-3 font-mono text-slate-700">
+                          <a
+                            href={`mailto:${report.contact_email}?subject=Regarding%20MegaMarket%20Ticket%20${report.reference_number}`}
+                            className="text-purple-600 hover:underline"
+                          >
+                            {report.contact_email}
+                          </a>
+                        </td>
+                        <td className="py-3 px-3 max-w-xs">
+                          <p className="line-clamp-2 text-slate-800">{report.description}</p>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                            {new Date(report.created_at).toLocaleString()}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
+                              report.status === 'open'
+                                ? 'bg-amber-100 text-amber-800'
+                                : report.status === 'investigating'
+                                ? 'bg-blue-100 text-blue-800'
+                                : report.status === 'resolved'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {report.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right space-x-1 whitespace-nowrap">
+                          {report.status !== 'investigating' && report.status !== 'resolved' && (
+                            <button
+                              onClick={() => handleUpdateReportStatus(report.id, 'investigating')}
+                              className="px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-md font-semibold text-[10px]"
+                            >
+                              Investigate
+                            </button>
+                          )}
+                          {report.status !== 'resolved' && (
+                            <button
+                              onClick={() => handleUpdateReportStatus(report.id, 'resolved')}
+                              className="px-2 py-1 bg-emerald-600 text-white hover:bg-emerald-700 rounded-md font-semibold text-[10px]"
+                            >
+                              Resolve
+                            </button>
+                          )}
+                          {report.status !== 'dismissed' && (
+                            <button
+                              onClick={() => handleUpdateReportStatus(report.id, 'dismissed')}
+                              className="px-2 py-1 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-md font-semibold text-[10px]"
+                            >
+                              Dismiss
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>

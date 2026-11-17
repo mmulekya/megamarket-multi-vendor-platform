@@ -1,8 +1,20 @@
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { dbHelpers } from '../db/index.ts';
 
-export const SESSION_SECRET = process.env.SESSION_SECRET || 'megamarket_default_dev_session_secret_2026';
+function getSessionSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (process.env.NODE_ENV === 'production') {
+    if (!secret || secret.trim().length < 32) {
+      console.error('Configuration Error: Missing required environment variable: SESSION_SECRET must be at least 32 characters in production.');
+      process.exit(1);
+    }
+    return secret.trim();
+  }
+  return secret || 'megamarket_default_dev_session_secret_2026_at_least_32_characters';
+}
+
+export const SESSION_SECRET = getSessionSecret();
 export const COOKIE_NAME = 'mm_session';
 
 export interface AuthSessionPayload {
@@ -29,27 +41,29 @@ declare global {
 }
 
 /**
- * Sign JWT session token
+ * Sign JWT session token (7-day validity)
  */
 export function createSessionToken(payload: AuthSessionPayload): string {
   return jwt.sign(payload, SESSION_SECRET, { expiresIn: '7d' });
 }
 
 /**
- * Set HTTP-Only, SameSite Session Cookie
+ * Set HTTP-Only, Secure, SameSite Session Cookie that expires with the JWT token
  */
 export function setSessionCookie(res: Response, token: string): void {
+  const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
   res.cookie(COOKIE_NAME, token, {
     httpOnly: true,
     sameSite: 'lax',
     secure: process.env.NODE_ENV === 'production',
-    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    maxAge,
+    expires: new Date(Date.now() + maxAge),
     path: '/',
   });
 }
 
 /**
- * Clear Session Cookie on Logout
+ * Invalidate Session Cookie completely on Logout
  */
 export function clearSessionCookie(res: Response): void {
   res.clearCookie(COOKIE_NAME, {
@@ -58,13 +72,20 @@ export function clearSessionCookie(res: Response): void {
     secure: process.env.NODE_ENV === 'production',
     path: '/',
   });
+  res.cookie(COOKIE_NAME, '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    expires: new Date(0),
+    maxAge: 0,
+    path: '/',
+  });
 }
 
 /**
  * Middleware: Extract and verify session token from Cookie or Bearer header
  */
-export function authenticateSession(req: Request, _res: Response, next: NextFunction): void {
-  // Read from httpOnly cookie or Authorization Bearer header
+export async function authenticateSession(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const token =
     req.cookies?.[COOKIE_NAME] ||
     (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : null);
@@ -76,13 +97,13 @@ export function authenticateSession(req: Request, _res: Response, next: NextFunc
   try {
     const decoded = jwt.verify(token, SESSION_SECRET) as AuthSessionPayload;
     if (decoded && decoded.userId) {
-      const user = dbHelpers.findUserById(decoded.userId);
-      if (user) {
+      const user = await dbHelpers.findUserById(decoded.userId);
+      if (user && Number(user.email_verified) === 1) {
         let vendorId: string | undefined;
         let vendorStatus: 'pending' | 'approved' | 'suspended' | undefined;
 
         if (user.role === 'vendor') {
-          const vendor = dbHelpers.findVendorByUserId(user.id);
+          const vendor = await dbHelpers.findVendorByUserId(user.id);
           if (vendor) {
             vendorId = vendor.id;
             vendorStatus = vendor.status;
@@ -157,4 +178,3 @@ export function requireApprovedVendor(req: Request, res: Response, next: NextFun
   }
   next();
 }
-

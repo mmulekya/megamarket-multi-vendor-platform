@@ -4,5 +4,8 @@ dist/
 coverage/
 .DS_Store
 *.log
-.env*
+*.sqlite
+.env
+.env.*
 !.env.example
+server/uploads

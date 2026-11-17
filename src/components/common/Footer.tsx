@@ -9,24 +9,33 @@ import {
   Mail,
   MapPin,
   Store,
-  HelpCircle,
-  ShoppingBag,
+  X,
+  AlertTriangle,
 } from 'lucide-react';
+import { useStore } from '../../context/StoreContext';
 
 interface FooterProps {
-  onOpenVendorHub: () => void;
+  onOpenVendorHub?: () => void;
+  setActiveView?: (view: 'store' | 'vendor' | 'admin' | 'info') => void;
+  onOpenAuth?: (mode?: 'login' | 'register', role?: 'customer' | 'vendor') => void;
 }
 
 /**
- * Footer Component (Phase 1 Clean-Up)
- * Professional, friendly marketplace footer in the style of Jumia/Kilimall.
- * Features:
+ * Footer Component
+ * Professional, friendly marketplace footer in the style of Jumia/Kilimall:
  * - Top customer trust pillars
- * - Four structured content sections: About, Help Center, Sell on MegaMarket, Payment & Socials
+ * - Four structured content sections: About, Help Center, Sell on MegaMarket, Payment & Contact
  * - Collapsible accordion sections on mobile (screens < 768px) for compact footprint
- * - Authentic M-Pesa, Card, and Cash on Delivery payment tags
+ * - Role-aware VENDOR ROOM button
+ * - Every link connects to a functional hash route or protocol link (tel:, mailto:)
  */
-export const Footer: React.FC<FooterProps> = ({ onOpenVendorHub }) => {
+export const Footer: React.FC<FooterProps> = ({
+  onOpenVendorHub,
+  setActiveView,
+  onOpenAuth,
+}) => {
+  const { currentUser, currentVendor, isLoggedIn } = useStore();
+
   // Mobile accordion state for collapsible footer sections
   const [openSections, setOpenSections] = useState<{ [key: string]: boolean }>({
     about: false,
@@ -35,12 +44,109 @@ export const Footer: React.FC<FooterProps> = ({ onOpenVendorHub }) => {
     payment: false,
   });
 
+  // Modal alert for pending / suspended vendor status
+  const [vendorNotice, setVendorNotice] = useState<{ title: string; message: string; type: 'warning' | 'info' } | null>(null);
+
   const toggleSection = (key: string) => {
     setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  /**
+   * Role-aware click handler for VENDOR ROOM button:
+   * - Approved vendor: open the Vendor Room.
+   * - Pending or suspended vendor: show a clear message about shop status.
+   * - Guest: open the Login screen.
+   * - Customer: open the Merchant Guidelines (#/sell/guidelines).
+   * - Admin: open the Admin Panel.
+   */
+  const handleVendorRoomClick = () => {
+    if (!isLoggedIn || !currentUser) {
+      if (onOpenAuth) {
+        onOpenAuth('login');
+      }
+      return;
+    }
+
+    if (currentUser.role === 'admin') {
+      if (setActiveView) {
+        setActiveView('admin');
+      } else if (onOpenVendorHub) {
+        onOpenVendorHub();
+      }
+      return;
+    }
+
+    if (currentUser.role === 'customer') {
+      window.location.hash = '#/sell/guidelines';
+      if (setActiveView) setActiveView('info');
+      return;
+    }
+
+    if (currentUser.role === 'vendor') {
+      const vendorStatus = currentVendor?.status || 'pending';
+      if (vendorStatus === 'approved') {
+        if (setActiveView) {
+          setActiveView('vendor');
+        } else if (onOpenVendorHub) {
+          onOpenVendorHub();
+        }
+      } else if (vendorStatus === 'pending') {
+        setVendorNotice({
+          title: 'Shop Pending Administrator Review',
+          message:
+            'Your shop application has been submitted and is currently under review by the platform administrator. You will be able to access the Vendor Room and publish catalog items once your store is approved.',
+          type: 'info',
+        });
+      } else if (vendorStatus === 'suspended') {
+        setVendorNotice({
+          title: 'Store Account Suspended',
+          message:
+            'Your vendor account has been temporarily suspended by the platform administrator. Please contact our support team at support@megamarket.co.ke to resolve outstanding compliance checks.',
+          type: 'warning',
+        });
+      }
+    }
+  };
+
   return (
-    <footer className="bg-[#27272A] text-slate-300 mt-12 border-t border-neutral-800 text-xs">
+    <footer className="bg-[#27272A] text-slate-300 mt-12 border-t border-neutral-800 text-xs relative">
+      {/* Vendor Status Notice Dialog */}
+      {vendorNotice && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white text-slate-900 rounded-2xl max-w-md w-full p-6 shadow-xl border border-slate-200 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                    vendorNotice.type === 'warning'
+                      ? 'bg-rose-100 text-rose-600'
+                      : 'bg-amber-100 text-amber-600'
+                  }`}
+                >
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <h3 className="font-bold text-sm text-slate-900">{vendorNotice.title}</h3>
+              </div>
+              <button
+                onClick={() => setVendorNotice(null)}
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-600 leading-relaxed">{vendorNotice.message}</p>
+            <div className="pt-2 flex justify-end gap-2">
+              <button
+                onClick={() => setVendorNotice(null)}
+                className="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors"
+              >
+                Understood
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 1. Value Proposition Trust Bar */}
       <div className="border-b border-neutral-800 py-6 px-4 bg-[#202023]">
         <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
@@ -110,10 +216,10 @@ export const Footer: React.FC<FooterProps> = ({ onOpenVendorHub }) => {
                 MegaMarket is Kenya’s friendly online marketplace connecting verified vendors with customers countrywide for electronics, fashion and daily essentials.
               </p>
               <ul className="space-y-1.5 text-[11px] text-neutral-400">
-                <li><span className="hover:text-white transition-colors cursor-pointer">About Us</span></li>
-                <li><span className="hover:text-white transition-colors cursor-pointer">Terms & Conditions</span></li>
-                <li><span className="hover:text-white transition-colors cursor-pointer">Privacy Policy</span></li>
-                <li><span className="hover:text-white transition-colors cursor-pointer">Careers & News</span></li>
+                <li><a href="#/about" className="hover:text-white transition-colors cursor-pointer">About Us</a></li>
+                <li><a href="#/terms" className="hover:text-white transition-colors cursor-pointer">Terms & Conditions</a></li>
+                <li><a href="#/privacy" className="hover:text-white transition-colors cursor-pointer">Privacy Policy</a></li>
+                <li><a href="#/careers" className="hover:text-white transition-colors cursor-pointer">Careers & News</a></li>
               </ul>
             </div>
           </div>
@@ -135,11 +241,11 @@ export const Footer: React.FC<FooterProps> = ({ onOpenVendorHub }) => {
               />
             </button>
             <div className={`mt-2.5 space-y-1.5 md:block ${openSections.help ? 'block' : 'hidden'} text-[11px] text-neutral-400`}>
-              <div><span className="hover:text-white transition-colors cursor-pointer">How to Shop on MegaMarket</span></div>
-              <div><span className="hover:text-white transition-colors cursor-pointer">Delivery Options & Timelines</span></div>
-              <div><span className="hover:text-white transition-colors cursor-pointer">Payment & Lipa Na M-Pesa Guide</span></div>
-              <div><span className="hover:text-white transition-colors cursor-pointer">Returns & Refund Policy</span></div>
-              <div><span className="hover:text-white transition-colors cursor-pointer">Report an Issue / Counterfeit</span></div>
+              <div><a href="#/help/how-to-shop" className="hover:text-white transition-colors cursor-pointer block py-0.5">How to Shop on MegaMarket</a></div>
+              <div><a href="#/help/delivery" className="hover:text-white transition-colors cursor-pointer block py-0.5">Delivery Options & Timelines</a></div>
+              <div><a href="#/help/payments" className="hover:text-white transition-colors cursor-pointer block py-0.5">Payment & Lipa Na M-Pesa Guide</a></div>
+              <div><a href="#/help/returns" className="hover:text-white transition-colors cursor-pointer block py-0.5">Returns & Refund Policy</a></div>
+              <div><a href="#/help/report" className="hover:text-white transition-colors cursor-pointer block py-0.5">Report an Issue / Counterfeit</a></div>
             </div>
           </div>
 
@@ -164,15 +270,16 @@ export const Footer: React.FC<FooterProps> = ({ onOpenVendorHub }) => {
                 Reach thousands of shoppers across Kenya. Open your store today with zero upfront listing fees.
               </p>
               <button
-                onClick={onOpenVendorHub}
-                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F68B1E] hover:bg-[#E07A15] text-white font-bold rounded-lg text-[11px] transition-colors min-h-[38px]"
+                onClick={handleVendorRoomClick}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-[#F68B1E] hover:bg-[#E07A15] text-white font-bold rounded-lg text-[11px] transition-colors min-h-[38px] cursor-pointer"
+                title="Open the Vendor Room"
               >
                 <Store className="w-3.5 h-3.5" />
                 <span>VENDOR ROOM</span>
               </button>
               <ul className="space-y-1 text-[11px] text-neutral-400 pt-1">
-                <li><span className="hover:text-white transition-colors cursor-pointer">Merchant Guidelines</span></li>
-                <li><span className="hover:text-white transition-colors cursor-pointer">Seller Fulfillment Policies</span></li>
+                <li><a href="#/sell/guidelines" className="hover:text-white transition-colors cursor-pointer block py-0.5">Merchant Guidelines</a></li>
+                <li><a href="#/sell/fulfilment" className="hover:text-white transition-colors cursor-pointer block py-0.5">Seller Fulfilment Policies</a></li>
               </ul>
             </div>
           </div>
@@ -213,36 +320,72 @@ export const Footer: React.FC<FooterProps> = ({ onOpenVendorHub }) => {
                 </div>
               </div>
 
-              {/* Contact Info */}
+              {/* Contact Info with tel: and mailto: and link to contact page */}
               <div className="space-y-1 text-[11px] text-neutral-400 pt-1">
-                <div className="flex items-center gap-1.5">
-                  <Phone className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>+254 700 123 456 (08:00 - 20:00)</span>
+                <div>
+                  <a
+                    href="tel:+254700123456"
+                    className="flex items-center gap-1.5 hover:text-white transition-colors"
+                  >
+                    <Phone className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>+254 700 123 456 (08:00 - 19:00)</span>
+                  </a>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <Mail className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>support@megamarket.co.ke</span>
+                <div>
+                  <a
+                    href="mailto:support@megamarket.co.ke"
+                    className="flex items-center gap-1.5 hover:text-white transition-colors"
+                  >
+                    <Mail className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>support@megamarket.co.ke</span>
+                  </a>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>Kilimani, Nairobi, Kenya</span>
+                <div>
+                  <a
+                    href="#/contact"
+                    className="flex items-center gap-1.5 hover:text-white transition-colors"
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>MegaMarket Hub, Kimathi Street, Nairobi</span>
+                  </a>
+                </div>
+                <div className="pt-1">
+                  <a
+                    href="#/contact"
+                    className="text-[#F68B1E] hover:underline font-semibold block text-[11px]"
+                  >
+                    Visit Contact Desk & Form →
+                  </a>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* 3. Bottom Bar: Copyright & Clean Brand Note */}
+        {/* 3. Bottom Bar: Copyright, Coursework Note & Clean Brand Links */}
         <div className="mt-8 pt-6 border-t border-neutral-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-neutral-400 text-[11px]">
-          <div className="flex items-center gap-2">
-            <span className="font-black text-white">Mega<span className="text-[#F68B1E]">Market</span></span>
-            <span>·</span>
-            <span>© 2026 MegaMarket East Africa Ltd. All rights reserved.</span>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-center sm:text-left">
+            <div className="flex items-center justify-center sm:justify-start gap-2">
+              <span className="font-black text-white">Mega<span className="text-[#F68B1E]">Market</span></span>
+              <span>·</span>
+              <span>© 2026 MegaMarket East Africa Ltd.</span>
+            </div>
+            <span className="hidden sm:inline">·</span>
+            <span className="text-neutral-500">Demo project for coursework. Policies and figures are examples.</span>
           </div>
-          <div className="flex items-center gap-4 text-neutral-400">
-            <span className="hover:text-white cursor-pointer transition-colors">Security</span>
-            <span className="hover:text-white cursor-pointer transition-colors">Privacy</span>
-            <span className="hover:text-white cursor-pointer transition-colors">Terms of Use</span>
+          <div className="flex flex-wrap items-center justify-center sm:justify-end gap-3 sm:gap-4 text-neutral-400">
+            <a
+              href="https://www.exchangerate-api.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-neutral-200 cursor-pointer transition-colors underline decoration-neutral-600 underline-offset-2"
+            >
+              Rates By Exchange Rate API
+            </a>
+            <span className="hidden sm:inline">·</span>
+            <a href="#/security" className="hover:text-white cursor-pointer transition-colors">Security</a>
+            <a href="#/privacy" className="hover:text-white cursor-pointer transition-colors">Privacy</a>
+            <a href="#/terms" className="hover:text-white cursor-pointer transition-colors">Terms of Use</a>
           </div>
         </div>
       </div>

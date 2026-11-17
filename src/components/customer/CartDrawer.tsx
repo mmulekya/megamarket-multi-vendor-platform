@@ -18,7 +18,7 @@ interface CartDrawerProps {
 }
 
 export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onCheckout }) => {
-  const { cart, removeFromCart, updateCartQuantity, clearCart, cartTotal, formatPrice } =
+  const { cart, removeFromCart, updateCartQuantity, clearCart, cartTotal, formatPrice, currency } =
     useStore();
 
   if (!isOpen) return null;
@@ -166,11 +166,24 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose, onCheck
                     )}
                   </span>
                 </div>
-                <div className="flex justify-between text-sm font-extrabold text-slate-900 pt-1.5 border-t border-slate-200">
+                <div className="flex justify-between items-baseline text-sm font-extrabold text-slate-900 pt-1.5 border-t border-slate-200">
                   <span>Total Amount</span>
-                  <span className="text-orange-600">{formatPrice(grandTotal)}</span>
+                  <div className="text-right">
+                    <span className="text-orange-600 block">{formatPrice(grandTotal)}</span>
+                    {currency !== 'KES' && (
+                      <span className="text-[11px] text-slate-500 font-normal block">
+                        (KES {grandTotal.toLocaleString()})
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
+
+              {currency !== 'KES' && (
+                <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 leading-snug">
+                  Prices are shown in <span className="font-bold">{currency}</span> as an estimate. You will be charged in KES.
+                </div>
+              )}
 
               <button
                 onClick={() => {

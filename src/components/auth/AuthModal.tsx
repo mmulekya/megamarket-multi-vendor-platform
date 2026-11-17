@@ -18,6 +18,7 @@ interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialMode?: 'login' | 'register';
+  initialRole?: 'customer' | 'vendor';
 }
 
 /**
@@ -31,11 +32,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   onClose,
   initialMode = 'login',
+  initialRole = 'customer',
 }) => {
   const { loginWithEmail, registerUser } = useStore();
 
   const [mode, setMode] = useState<'login' | 'register'>(initialMode);
-  const [registerRole, setRegisterRole] = useState<'customer' | 'vendor'>('customer');
+  const [registerRole, setRegisterRole] = useState<'customer' | 'vendor'>(initialRole);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      if (initialMode) setMode(initialMode);
+      if (initialRole) setRegisterRole(initialRole);
+    }
+  }, [isOpen, initialMode, initialRole]);
+
 
   // Login form state
   const [loginEmail, setLoginEmail] = useState('');
@@ -54,6 +64,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     storeDescription: '',
     city: 'Nairobi',
   });
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [registerErrors, setRegisterErrors] = useState<{
@@ -62,6 +73,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     password?: string;
     confirmPassword?: string;
     storeName?: string;
+    acceptedTerms?: string;
   }>({});
 
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -124,6 +136,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       password?: string;
       confirmPassword?: string;
       storeName?: string;
+      acceptedTerms?: string;
     } = {};
 
     if (!registerForm.fullName.trim() || registerForm.fullName.trim().length < 2) {
@@ -153,6 +166,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       errors.storeName = 'Store/Shop name is required for vendor registration.';
     }
 
+    if (!acceptedTerms) {
+      errors.acceptedTerms = 'You must confirm that you are 18 or older and agree to the Terms & Conditions and Privacy Policy.';
+    }
+
     setRegisterErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -176,6 +193,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         storeName: registerForm.storeName.trim(),
         storeDescription: registerForm.storeDescription.trim(),
         city: registerForm.city,
+        acceptedTerms,
       });
 
       if (res.success) {
@@ -184,6 +202,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           onClose();
           setFeedback(null);
           setRegisterErrors({});
+          setAcceptedTerms(false);
         }, 1400);
       } else {
         setFeedback({ message: res.message, type: 'error' });
@@ -624,6 +643,54 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Age 18+ and Terms & Privacy Checkbox */}
+              <div className="pt-1">
+                <label
+                  className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
+                    registerErrors.acceptedTerms
+                      ? 'border-rose-500 bg-rose-50/40'
+                      : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={acceptedTerms}
+                    onChange={(e) => {
+                      setAcceptedTerms(e.target.checked);
+                      if (registerErrors.acceptedTerms) {
+                        setRegisterErrors((prev) => ({ ...prev, acceptedTerms: undefined }));
+                      }
+                    }}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-[#F68B1E] focus:ring-[#F68B1E] accent-[#F68B1E] cursor-pointer"
+                  />
+                  <span className="text-xs text-slate-700 leading-relaxed">
+                    I am 18 years or older and I agree to the{' '}
+                    <a
+                      href="#/terms"
+                      onClick={() => onClose()}
+                      className="font-semibold text-[#F68B1E] hover:underline"
+                    >
+                      Terms &amp; Conditions
+                    </a>{' '}
+                    and{' '}
+                    <a
+                      href="#/privacy"
+                      onClick={() => onClose()}
+                      className="font-semibold text-[#F68B1E] hover:underline"
+                    >
+                      Privacy Policy
+                    </a>
+                    .
+                  </span>
+                </label>
+                {registerErrors.acceptedTerms && (
+                  <p className="mt-1 text-xs text-rose-600 font-medium flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{registerErrors.acceptedTerms}</span>
+                  </p>
+                )}
+              </div>
 
               <button
                 type="submit"
